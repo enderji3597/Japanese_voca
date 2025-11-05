@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>일본어 학습 통합 툴 🇯🇵</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+    <style>
+        /* =====================================
+           기본 레이아웃 및 사이드바 스타일
+           ===================================== */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            background: #f0f4f8; /* 밝은 배경 */
+            min-height: 100vh; 
+            display: flex; /* Flexbox 레이아웃 사용 */
+            color: #2d3748;
+        }
+        
+        /* 사이드바 메뉴 */
+        .sidebar {
+            width: 250px;
+            background: linear-gradient(180deg, #4b6cb7 0%, #182848 100%);
+            color: white;
+            padding: 20px 0;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.3);
+            flex-shrink: 0; /* 크기 고정 */
+        }
+        .sidebar h1 { 
+            font-size: 1.5em; 
+            text-align: center; 
+            margin-bottom: 30px; 
+            padding: 0 15px;
+            border-bottom: 1px solid rgba(255,255,255,0.2);
+            padding-bottom: 15px;
+        }
+        .sidebar-menu a {
+            display: block;
+            padding: 15px 25px;
+            color: white;
+            text-decoration: none;
+            font-size: 1.1em;
+            transition: background 0.3s;
+            border-left: 5px solid transparent;
+        }
+        .sidebar-menu a:hover:not(.active) {
+            background: rgba(255,255,255,0.1);
+        }
+        .sidebar-menu a.active {
+            background: #4b6cb7;
+            border-left: 5px solid #a0c4ff;
+            font-weight: bold;
+        }
+
+        /* 메인 콘텐츠 영역 */
+        .content-area {
+            flex-grow: 1; /* 남은 공간 모두 차지 */
+            padding: 30px;
+            overflow-y: auto; /* 내용이 많아지면 스크롤 */
+        }
+        .content-header { 
+            margin-bottom: 30px; 
+            color: #182848; 
+            border-bottom: 2px solid #e2e8f0;
+            padding-bottom: 10px;
+        }
+        .main-card { 
+            background: white; 
+            border-radius: 15px; 
+            padding: 30px; 
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1); 
+        }
+
+        /* 통계 카드 */
+        .stats { display: flex; gap: 20px; margin-bottom: 30px; flex-wrap: wrap; }
+        .stat-card { 
+            background: white; 
+            padding: 15px 30px; 
+            border-radius: 15px; 
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            border-left: 5px solid #4b6cb7;
+            flex: 1;
+            min-width: 150px;
+        }
+        .stat-number { font-size: 2em; font-weight: bold; color: #4b6cb7; }
+        .stat-label { color: #666; }
+        
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        
+        /* 컨트롤 및 버튼 */
+        .controls { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; align-items: center; }
+        button { padding: 12px 20px; border: none; border-radius: 8px; font-size: 1em; font-weight: bold; cursor: pointer; transition: all 0.3s; }
+        .btn-primary { background: #4b6cb7; color: white; }
+        .btn-primary:hover { background: #3a5aa0; transform: translateY(-1px); }
+        .btn-success { background: #48bb78; color: white; }
+        .btn-danger { background: #f56565; color: white; }
+        .btn-secondary { background: #cbd5e0; color: #2d3748; }
+
+        /* 입력 필드 */
+        input[type="text"], select, textarea, .search-input { width: 100%; padding: 10px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 1em; }
+        input[type="text"]:focus, select:focus, textarea:focus, .search-input:focus { outline: none; border-color: #4b6cb7; }
+
+        /* =====================================
+           단어 카드 및 그리드
+           ===================================== */
+        .vocab-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 20px; margin-top: 20px; }
+        .vocab-card { 
+            background: linear-gradient(135deg, #a0c4ff 0%, #6d8db7 100%); 
+            padding: 20px; 
+            border-radius: 10px; 
+            color: white; 
+            transition: all 0.3s; 
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            position: relative;
+        }
+        .vocab-card:hover { transform: translateY(-3px); box-shadow: 0 8px 15px rgba(0,0,0,0.2); }
+        .vocab-card.learned { 
+            background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%); 
+            opacity: 0.9; 
+            color: #4a5568; 
+            border: 1px solid #90caf9;
+        }
+        .kanji { font-size: 2em; font-weight: bold; margin-bottom: 5px; }
+        .hiragana { font-size: 1.2em; margin-bottom: 10px; opacity: 0.9; }
+        .meaning { font-size: 1em; border-top: 1px solid rgba(255,255,255,0.3); padding-top: 10px; }
+        .vocab-card.learned .meaning { border-top: 1px solid rgba(0,0,0,0.1); }
+        .card-actions { display: flex; gap: 5px; margin-top: 10px; }
+        .card-actions button { flex: 1; padding: 8px; font-size: 0.85em; }
+        
+        /* 🔊 발음 버튼 */
+        .speak-btn {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 1.5em;
+            cursor: pointer;
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            padding: 5px;
+            line-height: 1;
+        }
+        .vocab-card.learned .speak-btn { color: #4a5568; }
+
+        /* 암기 테스트 카드 전용 스타일 */
+        .memory-card {
+            background: #fff;
+            color: #2d3748;
+            height: 250px; 
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            font-size: 1.5em;
+            cursor: pointer;
+            border: 3px solid #4b6cb7;
+            transition: transform 0.5s, background 0.5s;
+            position: relative; /* 발음 버튼 위치를 위해 */
+        }
+        .memory-card.flipped { background: #e6fffa; }
+        .memory-card .front { font-size: 3em; font-weight: bold; color: #4b6cb7; transition: opacity 0.3s; }
+        .memory-card .back { color: #38a169; transition: opacity 0.3s; }
+        
+        .hidden-content { display: none; }
+        .visible-content { display: block; }
+        .card-footer { margin-top: 10px; font-size: 0.8em; color: #666; }
+        
+        /* 레벨 필터 드롭다운 */
+        #levelFilter { padding: 10px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 1em; }
+
+
+        /* =====================================
+           전체 단어 목록 테이블 스타일 (생략)
+           ===================================== */
+        .wordlist-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        .wordlist-table th, .wordlist-table td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #e2e8f0; }
+        .wordlist-table th { background-color: #4b6cb7; color: white; font-weight: bold; position: sticky; top: 0; z-index: 50; }
+        .wordlist-table tr:hover { background-color: #f7fafc; }
+        .wordlist-table td.status-learned { color: #48bb78; font-weight: bold; }
+        .wordlist-table td.status-unlearned { color: #f56565; }
+        .wordlist-actions button { padding: 5px 10px; font-size: 0.8em; }
+        .level-section-title-table {
+            background: #e9ecef;
+            color: #4a5568;
+            font-size: 1.2em;
+            padding: 10px 15px;
+            border-left: 5px solid #4b6cb7;
+            margin-top: 30px;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+
+        /* 기타 */
+        .empty-state { text-align: center; padding: 40px; color: #a0aec0; }
+        .file-upload { border: 2px dashed #4b6cb7; padding: 30px; text-align: center; border-radius: 15px; cursor: pointer; transition: all 0.3s; margin-bottom: 20px; }
+        
+        /* 쓰기 연습 캔버스 스타일 */
+        #writingCanvas { 
+            border: 2px solid #4b6cb7; 
+            background: #fff;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            max-width: 100%; /* 반응형 */
+            height: auto;
+        }
+        
+        /* 반응형 디자인 */
+        @media (max-width: 768px) {
+            body { flex-direction: column; }
+            .sidebar { width: 100%; height: auto; padding: 10px 0; }
+            .sidebar h1 { margin-bottom: 10px; padding-bottom: 5px; }
+            .sidebar-menu { display: flex; overflow-x: auto; padding: 0 10px; }
+            .sidebar-menu a { flex-shrink: 0; padding: 10px 15px; border-left: none; border-bottom: 3px solid transparent; }
+            .sidebar-menu a.active { border-bottom: 3px solid #a0c4ff; border-left: none; }
+            .content-area { padding: 20px; }
+            .stats { flex-direction: column; }
+            .vocab-grid { grid-template-columns: 1fr; }
+            .wordlist-table th, .wordlist-table td { font-size: 0.85em; padding: 8px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <h1>🇯🇵 통합 학습 툴</h1>
+        <nav class="sidebar-menu">
+            <a href="#" class="active" onclick="switchTab('study', event)">📚 홈 (단어 학습)</a>
+            <a href="#" onclick="switchTab('memory', event)">💡 암기 테스트</a>
+            <a href="#" onclick="switchTab('write', event)">✍️ 쓰기 연습</a>
+            <a href="#" onclick="switchTab('add', event)">➕ 단어 추가</a>
+            <a href="#" onclick="switchTab('upload', event)">📤 CSV 업로드</a>
+        </nav>
+    </div>
+
+    <div class="content-area">
+        <header class="content-header">
+            <h2 id="currentTitle">📚 홈 (오늘의 랜덤 단어)</h2>
+        </header>
+
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-number" id="totalWords">0</div>
+                <div class="stat-label">전체 단어</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="learnedWords">0</div>
+                <div class="stat-label">학습 완료</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="reviewWords">0</div>
+                <div class="stat-label">미학습 단어</div>
+            </div>
+        </div>
+
+        <div id="studyTab" class="tab-content active">
+            <div class="main-card">
+                <div class="search-container" style="margin-bottom: 15px;">
+                    <input type="text" id="searchInput" class="search-input" onkeyup="searchVocab()" placeholder="🔍 한자, 히라가나, 뜻으로 검색...">
+                </div>
+
+                <div class="controls">
+                    <button class="btn-primary" onclick="loadRandomWords()">🎲 새로운 10개 단어 보기</button>
+                    <button class="btn-primary" onclick="displayAllWordsByLevel()">📖 전체 단어 목록 보기</button> 
+                    <button class="btn-danger" onclick="resetAllData()">🚨 단어장 초기화</button> 
+                </div>
+                <div id="vocabListContainer">
+                    <div id="vocabGrid" class="vocab-grid">
+                        <div class="empty-state" id="emptyState" style="grid-column: 1 / -1;">
+                            <div class="empty-state-icon">📝</div>
+                            <p>현재 단어장에 단어가 없습니다.<br> '단어 추가' 또는 'CSV 업로드' 탭에서 단어를 추가해 주세요!</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="memoryTab" class="tab-content">
+            <div class="main-card">
+                <h2 style="margin-bottom: 20px;">💡 암기 테스트 (플래시 카드)</h2>
+                
+                <div class="controls">
+                    <select id="levelFilter" onchange="startMemoryDrill()">
+                        <option value="All">전체 레벨</option>
+                        <option value="N1">N1</option>
+                        <option value="N2">N2</option>
+                        <option value="N3">N3</option>
+                        <option value="N4">N4</option>
+                        <option value="N5">N5</option>
+                        <option value="N?">N? (미지정)</option>
+                    </select>
+                    <button class="btn-primary" onclick="startMemoryDrill()">➡️ 다음 단어</button>
+                    <button class="btn-success" onclick="if(currentMemoryWord) { markLearned(currentMemoryWord.id, true); startMemoryDrill(); }">✅ 암기 완료 & 다음</button>
+                </div>
+
+                <div id="memoryCardContainer" class="vocab-grid" style="grid-template-columns: 1fr; margin-top: 0;">
+                    <div id="memoryCard" class="memory-card" onclick="flipCard()">
+                        <button class="speak-btn" id="memorySpeakBtn" onclick="event.stopPropagation(); speakWord(currentMemoryWord ? currentMemoryWord.hiragana : '')">🔊</button>
+                        <div id="memoryFront" class="front visible-content">단어 준비 중...</div>
+                        <div id="memoryBack" class="back hidden-content"></div>
+                        <div id="memoryFooter" class="card-footer">클릭해서 뜻을 확인하세요</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div id="writeTab" class="tab-content">
+            <div class="main-card">
+                <h2 style="margin-bottom: 20px;">✍️ 쓰기 연습 (플래시 카드 드릴)</h2>
+                
+                <div class="controls">
+                    <select id="writeLevelFilter" onchange="startWritingDrill()">
+                        <option value="All">전체 레벨</option>
+                        <option value="N1">N1</option>
+                        <option value="N2">N2</option>
+                        <option value="N3">N3</option>
+                        <option value="N4">N4</option>
+                        <option value="N5">N5</option>
+                        <option value="N?">N? (미지정)</option>
+                    </select>
+                    <button class="btn-primary" onclick="startWritingDrill()">➡️ 다음 단어</button>
+                </div>
+
+                <div id="drillWordDisplay" style="text-align: center; margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 8px; background: #f7fafc;">
+                    <p style="color: #666; font-size: 1.1em; margin-bottom: 5px;"><strong id="writingHint">단어의 뜻과 읽는 법이 여기에 표시됩니다.</strong></p>
+                    <h3 id="drillTitle" style="font-size: 1.8em; color: #4b6cb7;">준비 중...</h3>
+                </div>
+
+                <div class="writing-area" style="display: flex; flex-direction: column; align-items: center;">
+                    <button class="speak-btn" id="writeSpeakBtn" onclick="event.stopPropagation(); speakWord(currentDrillWord ? currentDrillWord.hiragana : '')" style="position: static; color: #4b6cb7; margin-bottom: 10px;">🔊 단어 읽기</button>
+                    <canvas id="writingCanvas" width="540" height="200" style="max-width: 100%;"></canvas>
+                    
+                    <div class="correct-answer" id="correctAnswerDisplay" style="font-size: 3em; font-weight: bold; color: #e53e3e; min-height: 1.5em; margin: 15px 0;"></div>
+                    
+                    <div style="display: flex; gap: 10px; justify-content: center; width: 100%;">
+                        <button class="btn-primary" onclick="clearCanvas()">📝 다시 쓰기</button>
+                        <button class="btn-success" onclick="showAnswer()">✅ 정답 보기</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div id="addTab" class="tab-content">
+            <div class="main-card">
+                <h2 style="margin-bottom: 20px;">➕ 새 단어 직접 추가하기</h2>
+                <div style="border: 1px solid #e2e8f0; padding: 20px; border-radius: 10px;">
+                    <div class="form-group" style="margin-bottom: 10px;">
+                        <label style="font-weight: bold; color: #4b6cb7;">한자 (漢字)</label>
+                        <input type="text" id="kanjiInput" placeholder="例: 食べる">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 10px;">
+                        <label style="font-weight: bold; color: #4b6cb7;">히라가나 (読み)</label>
+                        <input type="text" id="hiraganaInput" placeholder="例: たべる">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 10px;">
+                        <label style="font-weight: bold; color: #4b6cb7;">뜻 (意味)</label>
+                        <input type="text" id="meaningInput" placeholder="例: 먹다">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 20px;">
+                        <label style="font-weight: bold; color: #4b6cb7;">JLPT 레벨</label>
+                        <select id="jlptInput">
+                            <option value="N1" selected>N1 (고급)</option>
+                            <option value="N2">N2</option>
+                            <option value="N3">N3 (중급)</option>
+                            <option value="N4">N4</option>
+                            <option value="N5">N5 (초급)</option>
+                            <option value="N?">N? (미지정)</option>
+                        </select>
+                    </div>
+                    <button class="btn-primary" onclick="addWord()">단어장에 추가하기</button>
+                </div>
+            </div>
+        </div>
+        <div id="uploadTab" class="tab-content">
+            <div class="main-card">
+                <h2 style="margin-bottom: 20px;">📤 CSV 파일 업로드 (단어 추가)</h2>
+                <div class="file-upload" onclick="document.getElementById('csvFile').click()">
+                    <input type="file" id="csvFile" accept=".csv" onchange="handleCSVUpload(event)" style="display: none;">
+                    <div style="font-size: 3em; margin-bottom: 10px;">📁</div>
+                    <h3>클릭해서 CSV 파일 선택</h3>
+                    <p style="color: #666; margin-top: 10px;">기존 단어장에 단어를 **추가**합니다.</p>
+                </div>
+
+                <div class="csv-guide">
+                    <h3 style="margin-bottom: 10px;">📋 CSV 형식 가이드 (N1 파일 기준)</h3>
+                    <p style="margin-bottom: 10px;">업로드 기능은 네가 올렸던 N1 파일 형식에 맞춰져 있습니다:</p>
+                    <pre style="background: #f0f4f8; padding: 10px; border-radius: 5px; overflow-x: auto; border: 1px solid #ddd;">한자,뜻,품사,히라가나,...</pre>
+                    <p style="margin-top: 10px; color: #e53e3e; font-weight: bold;">[0]=한자, [1]=뜻, [3]=히라가나를 읽어옵니다. 첫 번째 줄(헤더)은 무시됩니다.</p>
+                </div>
+            </div>
+        </div>
+        </div>
+
+    <script>
+        // ⭐️ N5 기본 단어 10개 (초기화 및 비어 있을 때 대비)
+        const defaultVocabularies = [
+            { id: 101, kanji: '私', hiragana: 'わたし', meaning: '나, 저', jlpt: 'N5', isLearned: false },
+            { id: 103, kanji: '学校', hiragana: 'がっこう', meaning: '학교', jlpt: 'N5', isLearned: false },
+            { id: 104, kanji: '学生', hiragana: 'がくせい', meaning: '학생', jlpt: 'N5', isLearned: false },
+            { id: 107, kanji: '本', hiragana: 'ほん', meaning: '책', jlpt: 'N5', isLearned: false },
+            { id: 108, kanji: '辞書', hiragana: 'じしょ', meaning: '사전', jlpt: 'N5', isLearned: false },
+            { id: 138, kanji: '食べる', hiragana: 'たべる', meaning: '먹다', jlpt: 'N5', isLearned: false },
+            { id: 139, kanji: '飲む', hiragana: 'のむ', meaning: '마시다', jlpt: 'N5', isLearned: false },
+            { id: 140, kanji: '見る', hiragana: 'みる', meaning: '보다', jlpt: 'N5', isLearned: false },
+            { id: 146, kanji: '大きい', hiragana: 'おおきい', meaning: '크다', jlpt: 'N5', isLearned: false },
+            { id: 150, kanji: '新しい', hiragana: 'あたらしい', meaning: '새롭다', jlpt: 'N5', isLearned: false },
+        ];
+
+        let vocabularies = [];
+        const STORAGE_KEY = 'userVocabularies';
+        // const GRAMMAR_MEMO_KEY = 'grammarMemoContent'; // 문법 메모장 제거
+        const JLPT_ORDER = ['N1', 'N2', 'N3', 'N4', 'N5', 'N?'];
+        
+        let currentDisplayMode = 'random'; 
+        let currentDrillWord = null; 
+        let currentMemoryWord = null; 
+
+        // ------------------------------------
+        // 1. 유틸리티 및 데이터 관리
+        // ------------------------------------
+
+        function saveVocabularies() {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(vocabularies));
+            updateStats();
+        }
+
+        function generateUniqueId() {
+            return Date.now() + Math.floor(Math.random() * 1000);
+        }
+
+        function updateStats() {
+            const total = vocabularies.length;
+            const learned = vocabularies.filter(word => word.isLearned).length;
+            const review = total - learned; 
+
+            document.getElementById('totalWords').textContent = total;
+            document.getElementById('learnedWords').textContent = learned;
+            document.getElementById('reviewWords').textContent = review;
+
+            const emptyState = document.getElementById('emptyState');
+            if (emptyState) {
+                const isSearching = document.getElementById('searchInput').value.trim() !== '';
+
+                if (total === 0 || (isSearching && document.getElementById('vocabGrid') && document.getElementById('vocabGrid').childElementCount === 0)) {
+                    emptyState.style.display = 'block';
+                } else {
+                    emptyState.style.display = 'none';
+                }
+            }
+        }
+        
+        // ------------------------------------
+        // 2. 🔊 단어 읽어주기 기능 (TTS)
+        // ------------------------------------
+        
+        const synth = window.speechSynthesis;
+        let jpVoice = null;
+
+        function initializeSpeechSynthesis() {
+            if (!synth) {
+                console.warn("Speech Synthesis API is not supported by this browser.");
+                return;
+            }
+            
+            const populateVoices = () => {
+                jpVoice = synth.getVoices().find(voice => voice.lang.startsWith('ja-'));
+            };
+
+            // Voices might not be loaded immediately
+            if (synth.onvoiceschanged !== undefined) {
+                synth.onvoiceschanged = populateVoices;
+            }
+            populateVoices(); 
+        }
+
+        function speakWord(text) {
+            if (synth.speaking) {
+                synth.cancel();
+            }
+            
+            const utter = new SpeechSynthesisUtterance(text);
+            utter.lang = 'ja-JP'; 
+            
+            // 일본어 목소리를 찾았다면 설정
+            if (jpVoice) {
+                utter.voice = jpVoice;
+            } else {
+                 // 없다면 기본 일본어 설정을 사용하도록 시도 (브라우저 기본값)
+                 console.warn("Japanese voice not found, using default voice.");
+            }
+            
+            synth.speak(utter);
+        }
+
+
+        // ------------------------------------
+        // 3. UI 및 탭 전환
+        // ------------------------------------
+
+        function switchTab(tabId, event) {
+            if (event) event.preventDefault();
+            
+            // 메뉴 활성화
+            document.querySelectorAll('.sidebar-menu a').forEach(a => a.classList.remove('active'));
+            document.querySelector(`.sidebar-menu a[onclick*="${tabId}"]`).classList.add('active');
+
+            // 내용 표시
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            document.getElementById(`${tabId}Tab`).classList.add('active');
+            
+            const titleMap = {
+                'study': '📚 홈 (오늘의 랜덤 단어)',
+                'memory': '💡 암기 테스트',
+                'write': '✍️ 쓰기 연습',
+                'add': '➕ 단어 추가',
+                'upload': '📤 CSV 업로드'
+            };
+            document.getElementById('currentTitle').textContent = titleMap[tabId];
+
+
+            if (tabId === 'study') {
+                document.getElementById('searchInput').value = '';
+                if (currentDisplayMode === 'all') {
+                     displayAllWordsByLevel(); 
+                } else {
+                    loadRandomWords(); 
+                }
+            } else if (tabId === 'write') {
+                startWritingDrill(); 
+            } else if (tabId === 'memory') {
+                startMemoryDrill();
+            }
+        }
+
+        function createVocabCard(word) {
+            const card = document.createElement('div');
+            card.className = `vocab-card ${word.isLearned ? 'learned' : ''}`;
+            
+            card.onclick = (e) => {
+                if (!e.target.closest('.card-actions') && !e.target.closest('.speak-btn')) {
+                     switchTab('memory');
+                     startMemoryDrill(word.id);
+                }
+            }; 
+            
+            const actionButton = word.isLearned 
+                ? `<button class="btn-secondary" onclick="event.stopPropagation(); markLearned(${word.id}, false); updateDisplayAfterAction();">🔄 완료 취소</button>`
+                : `<button class="btn-success" onclick="event.stopPropagation(); markLearned(${word.id}, true); updateDisplayAfterAction();">✅ 학습 완료</button>`;
+
+            card.innerHTML = `
+                <button class="speak-btn" onclick="event.stopPropagation(); speakWord('${word.hiragana}')">🔊</button>
+                <div class="kanji">${word.kanji}</div>
+                <div class="hiragana">${word.hiragana}</div>
+                <div class="meaning">${word.meaning} (${word.jlpt})</div>
+                <div class="card-actions" onclick="event.stopPropagation()">
+                    ${actionButton}
+                    <button class="btn-danger" onclick="deleteWord(${word.id})">🗑️ 삭제</button>
+                </div>
+            `;
+            return card;
+        }
+        
+        // (displayVocabGrid, displayAllWordsByLevel, updateDisplayAfterAction 등 기존 함수들은 대부분 유지)
+        function displayVocabGrid(words, mode = 'random') {
+            const container = document.getElementById('vocabListContainer');
+            if (!container.querySelector('.vocab-grid')) {
+                 container.innerHTML = `<div id="vocabGrid" class="vocab-grid"></div>`;
+            }
+            const grid = document.getElementById('vocabGrid');
+            grid.innerHTML = ''; 
+            currentDisplayMode = mode;
+
+            if (words.length === 0 && vocabularies.length > 0) {
+                 grid.innerHTML = `
+                    <div class="empty-state" style="grid-column: 1 / -1;">
+                        <div class="empty-state-icon">🎉</div>
+                        <p>지금은 표시할 단어가 없습니다. 검색 필터를 지우거나 '전체 단어 목록 보기'를 사용해 보세요.</p>
+                    </div>
+                `;
+            } else if (vocabularies.length === 0) {
+                 grid.innerHTML = `
+                    <div class="empty-state" id="emptyState" style="grid-column: 1 / -1;">
+                        <div class="empty-state-icon">📝</div>
+                        <p>현재 단어장에 단어가 없습니다.<br> '단어 추가' 또는 'CSV 업로드' 탭에서 단어를 추가해 주세요!</p>
+                    </div>
+                `;
+            } else {
+                words.forEach(word => {
+                    grid.appendChild(createVocabCard(word));
+                });
+            }
+            updateStats();
+        }
+
+        function loadRandomWords() {
+            document.getElementById('searchInput').value = ''; 
+            if (vocabularies.length === 0) {
+                displayVocabGrid([], 'random');
+                return;
+            }
+            const unleanedWords = vocabularies.filter(word => !word.isLearned);
+            const sourceList = unleanedWords.length > 0 ? unleanedWords : vocabularies;
+            const shuffled = sourceList.sort(() => 0.5 - Math.random());
+            const selectedWords = shuffled.slice(0, 10);
+            
+            displayVocabGrid(selectedWords, 'random');
+        }
+
+        // (이하 단어 관리 함수는 기존과 동일하게 유지)
+
+        // ------------------------------------
+        // 4. 💡 암기 테스트 (플래시 카드)
+        // ------------------------------------
+        
+        function startMemoryDrill(wordId) {
+            const memoryCard = document.getElementById('memoryCard');
+            const memoryFront = document.getElementById('memoryFront');
+            const memoryBack = document.getElementById('memoryBack');
+            const memoryFooter = document.getElementById('memoryFooter');
+            const levelFilter = document.getElementById('levelFilter').value;
+            
+            // ⭐️ 레벨 필터링
+            const filteredWords = vocabularies.filter(word => 
+                levelFilter === 'All' || word.jlpt === levelFilter
+            );
+
+            if (filteredWords.length === 0) {
+                 memoryFront.textContent = `선택된 레벨(${levelFilter})의 단어가 없습니다.`;
+                 memoryBack.textContent = '';
+                 memoryCard.classList.remove('flipped');
+                 memoryFooter.textContent = '다른 레벨을 선택하거나 단어를 추가해주세요.';
+                 currentMemoryWord = null;
+                 return;
+            }
+
+            let word;
+            if (wordId) {
+                word = filteredWords.find(w => w.id === wordId);
+                // 특정 ID로 찾지 못했거나 필터링되었다면 랜덤으로 다시 선택
+                if (!word) wordId = null;
+            }
+            
+            if (!wordId) {
+                // 랜덤으로 단어 선택 (비학습 단어 우선)
+                const unleanedWords = filteredWords.filter(w => !w.isLearned);
+                const sourceList = unleanedWords.length > 0 ? unleanedWords : filteredWords;
+                const randomIndex = Math.floor(Math.random() * sourceList.length);
+                word = sourceList[randomIndex];
+            }
+            
+            if (!word) {
+                 // 필터링 후 단어가 없을 경우의 예외 처리 (실행될 가능성은 낮음)
+                 memoryFront.textContent = '단어 준비 오류.';
+                 return;
+            }
+
+            currentMemoryWord = word;
+            memoryCard.classList.remove('flipped');
+            
+            // 앞면 (읽기 + 한자)
+            memoryFront.innerHTML = `${word.kanji}<br><span style="font-size: 0.5em; opacity: 0.7;">(${word.hiragana})</span>`;
+            memoryFront.classList.add('visible-content');
+            memoryFront.classList.remove('hidden-content');
+            
+            // 뒷면 (뜻)
+            memoryBack.innerHTML = `<span style="font-size: 0.6em; color: #4b6cb7;">뜻 (${word.jlpt})</span><br>${word.meaning}`;
+            memoryBack.classList.add('hidden-content');
+            memoryBack.classList.remove('visible-content');
+
+            memoryFooter.textContent = '클릭해서 뜻을 확인하세요';
+            
+            // 발음 버튼 업데이트
+            document.getElementById('memorySpeakBtn').onclick = (e) => {
+                e.stopPropagation();
+                speakWord(word.hiragana);
+            };
+        }
+
+        function flipCard() {
+            if (!currentMemoryWord) return;
+            const memoryCard = document.getElementById('memoryCard');
+            const memoryFront = document.getElementById('memoryFront');
+            const memoryBack = document.getElementById('memoryBack');
+            
+            memoryCard.classList.toggle('flipped');
+            
+            if (memoryCard.classList.contains('flipped')) {
+                memoryFront.classList.add('hidden-content');
+                memoryFront.classList.remove('visible-content');
+                memoryBack.classList.add('visible-content');
+                memoryBack.classList.remove('hidden-content');
+            } else {
+                memoryFront.classList.add('visible-content');
+                memoryFront.classList.remove('hidden-content');
+                memoryBack.classList.add('hidden-content');
+                memoryBack.classList.remove('visible-content');
+            }
+        }
+
+
+        // ------------------------------------
+        // 5. ✍️ 쓰기 연습 (캔버스)
+        // ------------------------------------
+        
+        const canvas = document.getElementById('writingCanvas');
+        const ctx = canvas.getContext('2d');
+        let isDrawing = false;
+        let lastX = 0;
+        let lastY = 0;
+
+        function initializeCanvas() { 
+            ctx.lineWidth = 5;
+            ctx.lineCap = 'round';
+            ctx.strokeStyle = 'black';
+            ctx.fillStyle = '#fff';
+            
+            canvas.width = 540;
+            canvas.height = 200;
+            
+            clearCanvas();
+
+            // 이벤트 리스너 재정의
+            canvas.onmousedown = (e) => startDrawing(e.offsetX, e.offsetY);
+            canvas.onmousemove = (e) => draw(e.offsetX, e.offsetY);
+            canvas.onmouseup = stopDrawing;
+            canvas.onmouseout = stopDrawing;
+
+            // 터치 이벤트 재정의
+            canvas.ontouchstart = (e) => {
+                e.preventDefault();
+                const touch = e.touches[0];
+                const rect = canvas.getBoundingClientRect();
+                startDrawing(touch.clientX - rect.left, touch.clientY - rect.top);
+            };
+            canvas.ontouchmove = (e) => {
+                e.preventDefault();
+                const touch = e.touches[0];
+                const rect = canvas.getBoundingClientRect();
+                draw(touch.clientX - rect.left, touch.clientY - rect.top);
+            };
+            canvas.ontouchend = stopDrawing;
+        }
+
+        function startWritingDrill(wordId) {
+            const levelFilter = document.getElementById('writeLevelFilter').value;
+            
+            // ⭐️ 레벨 필터링
+            const filteredWords = vocabularies.filter(word => 
+                levelFilter === 'All' || word.jlpt === levelFilter
+            );
+
+            if (filteredWords.length === 0) {
+                 document.getElementById('drillTitle').textContent = `선택된 레벨(${levelFilter})의 단어가 없습니다.`;
+                 document.getElementById('writingHint').textContent = '다른 레벨을 선택하거나 단어를 추가해주세요.';
+                 document.getElementById('correctAnswerDisplay').textContent = '';
+                 clearCanvas();
+                 currentDrillWord = null;
+                 return;
+            }
+
+
+            let word;
+            if (wordId) {
+                word = filteredWords.find(w => w.id === wordId);
+                if (!word) wordId = null;
+            }
+            
+            if (!wordId) {
+                const unleanedWords = filteredWords.filter(w => !w.isLearned);
+                const sourceList = unleanedWords.length > 0 ? unleanedWords : filteredWords;
+                const randomIndex = Math.floor(Math.random() * sourceList.length);
+                word = sourceList[randomIndex];
+            }
+            
+            if (!word) {
+                 document.getElementById('drillTitle').textContent = '단어 준비 오류.';
+                 return;
+            }
+
+
+            currentDrillWord = word;
+            document.getElementById('drillTitle').textContent = `[${word.jlpt}] - ${word.meaning}`;
+            document.getElementById('writingHint').textContent = `읽기: ${word.hiragana}`;
+            
+            clearCanvas();
+            document.getElementById('correctAnswerDisplay').textContent = '';
+            
+            document.getElementById('writeSpeakBtn').onclick = (e) => {
+                e.stopPropagation();
+                speakWord(word.hiragana);
+            };
+        }
+
+        function showAnswer() { 
+            if (currentDrillWord) { 
+                document.getElementById('correctAnswerDisplay').textContent = currentDrillWord.kanji; 
+            }
+        }
+        
+        function startDrawing(x, y) { isDrawing = true; [lastX, lastY] = [x, y]; }
+        function draw(x, y) {
+            if (!isDrawing) return;
+            ctx.beginPath();
+            ctx.moveTo(lastX, lastY);
+            ctx.lineTo(x, y);
+            ctx.stroke();
+            [lastX, lastY] = [x, y];
+        }
+        function stopDrawing() { isDrawing = false; }
+        function clearCanvas() { 
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            if(document.getElementById('correctAnswerDisplay')) {
+                 document.getElementById('correctAnswerDisplay').textContent = '';
+            }
+        }
+
+        // ------------------------------------
+        // 6. 초기 실행 로직
+        // ------------------------------------
+        
+        window.onload = function() {
+            const storedVocabs = localStorage.getItem(STORAGE_KEY);
+
+            if (storedVocabs === null || storedVocabs === '[]' || JSON.parse(storedVocabs).length === 0) {
+                vocabularies = JSON.parse(JSON.stringify(defaultVocabularies));
+                saveVocabularies();
+            } else {
+                vocabularies = JSON.parse(storedVocabs);
+            }
+            
+            initializeSpeechSynthesis(); // TTS 초기화
+            initializeCanvas();
+            updateStats();
+            
+            // ⭐️ 초기 화면은 'study' 탭으로 설정 (랜덤 10개 단어)
+            switchTab('study'); 
+        };
+    </script>
+</body>
+</html>
